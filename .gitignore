@@ -1,0 +1,10 @@
+.env
+.env.*
+.DS_Store
+Thumbs.db
+*.log
+*.bak
+*.swp
+.idea/
+.vscode/
+*.sublime-*

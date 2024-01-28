@@ -1,0 +1,61 @@
+name: Database CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  mysql-validate:
+    name: Validate schema, data and queries
+    runs-on: ubuntu-latest
+
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: rootpw
+          MYSQL_DATABASE: scratch
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -prootpw"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Wait for MySQL to be ready
+        run: |
+          for i in {1..30}; do
+            if mysqladmin ping -h 127.0.0.1 -uroot -prootpw --silent; then
+              echo "MySQL is up."; exit 0
+            fi
+            echo "Waiting for MySQL ($i/30)..."; sleep 2
+          done
+          echo "MySQL did not become ready in time"; exit 1
+
+      - name: Apply schema (01_schema.sql)
+        run: mysql -h 127.0.0.1 -uroot -prootpw < sql/01_schema.sql
+
+      - name: Seed data (02_insert_data.sql)
+        run: mysql -h 127.0.0.1 -uroot -prootpw carsaaz < sql/02_insert_data.sql
+
+      - name: Run demo queries (03_queries.sql)
+        run: mysql -h 127.0.0.1 -uroot -prootpw carsaaz < sql/03_queries.sql
+
+      - name: Sanity-check row counts
+        run: |
+          mysql -h 127.0.0.1 -uroot -prootpw carsaaz -N -B -e "
+            SELECT CONCAT('brand=',        (SELECT COUNT(*) FROM brand));
+            SELECT CONCAT('showroom=',     (SELECT COUNT(*) FROM showroom));
+            SELECT CONCAT('car=',          (SELECT COUNT(*) FROM car));
+            SELECT CONCAT('customer=',     (SELECT COUNT(*) FROM customer));
+            SELECT CONCAT('booking=',      (SELECT COUNT(*) FROM booking));
+            SELECT CONCAT('invoice=',      (SELECT COUNT(*) FROM invoice));
+            SELECT CONCAT('car_product=',  (SELECT COUNT(*) FROM car_product));
+          "
